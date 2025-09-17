@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -34,10 +34,10 @@ const promotionSchema = z
       .min(1, "Discount must be at least 1%")
       .max(100, "Discount cannot exceed 100%")
       .optional(),
-    productCategory: z.string().min(1, "Please select a product category"),
+    productCategory: z.string().min(1, "Product category is required"),
     productSubCategory: z
       .string()
-      .min(1, "Please select a product sub-category"),
+      .min(1, "Product gender is required"),
     startDate: z.date(),
     endDate: z.date(),
     targetingArea: z.string().min(1, "Targeting area is required"),
@@ -72,10 +72,21 @@ const promotionSchema = z
   );
 
 type PromotionFormData = z.infer<typeof promotionSchema>;
-
-
-import { useEffect, useState } from "react";
 type ProductOption = { value: string; label: string };
+
+const categories = [
+  { value: "clothing", label: "Clothing" },
+  { value: "footwear", label: "Footwear" },
+  { value: "accessories", label: "Accessories" },
+  { value: "electronics", label: "Electronics" },
+];
+
+const subCategories = [
+  { value: "mens", label: "Men's" },
+  { value: "womens", label: "Women's" },
+  { value: "kids", label: "Kids" },
+  { value: "unisex", label: "Unisex" },
+];
 
 const CreatePromotionForm: React.FC = () => {
   const {
@@ -99,6 +110,9 @@ const CreatePromotionForm: React.FC = () => {
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [productError, setProductError] = useState<string | null>(null);
   const [fetchingProduct, setFetchingProduct] = useState(false);
+
+  const watchDiscountedPrice = watch("discountedPrice");
+  const watchDiscountType = watch("discountType");
 
   // Fetch all products for dropdown on mount
   useEffect(() => {
@@ -134,51 +148,21 @@ const CreatePromotionForm: React.FC = () => {
         const res = await fetch(`/api/products/${selectedProductId}`);
         if (!res.ok) throw new Error("Failed to fetch product details");
         const prod = await res.json();
+        
+        // Print all product details to console
+        console.log("Selected Product Details:", prod);
+        
+        // Auto-fill category and gender (sub-category) from the selected product
         if (prod.category) setValue("productCategory", prod.category);
-        if (prod.sub_category) setValue("productSubCategory", prod.sub_category);
-        if (prod.description) setValue("shortDescription", prod.description);
-        // Add more fields as needed
+        if (prod.gender) setValue("productSubCategory", prod.gender);
       } catch (err) {
-        // Optionally handle error
+        console.error("Error fetching product details:", err);
       } finally {
         setFetchingProduct(false);
       }
     };
     fetchProductDetails();
   }, [selectedProductId, setValue]);
-
-const categories = [
-  { value: "clothing", label: "Clothing" },
-  { value: "footwear", label: "Footwear" },
-  { value: "accessories", label: "Accessories" },
-  { value: "electronics", label: "Electronics" },
-];
-
-const subCategories = [
-  { value: "mens", label: "Men's" },
-  { value: "womens", label: "Women's" },
-  { value: "kids", label: "Kids" },
-  { value: "unisex", label: "Unisex" },
-];
-
-const CreatePromotionForm: React.FC = () => {
-  const {
-    register,
-    handleSubmit,
-    control,
-    watch,
-    formState: { errors, isSubmitting },
-    reset,
-  } = useForm<PromotionFormData>({
-    resolver: zodResolver(promotionSchema),
-    defaultValues: {
-      discountedPrice: false,
-      discountType: "flat",
-    },
-  });
-
-  const watchDiscountedPrice = watch("discountedPrice");
-  const watchDiscountType = watch("discountType");
 
   const onSubmit = async (data: PromotionFormData) => {
     try {
@@ -215,28 +199,35 @@ const CreatePromotionForm: React.FC = () => {
                   )}
 
                   {/* Select Product */}
-                  <Controller
-                    name="selectedProduct"
-                    control={control}
-                    render={({ field }) => (
-                      <>
-                        <Select
-                          label="Select Product"
-                          items={products}
-                          placeholder={loadingProducts ? "Loading..." : "Choose product"}
-                          value={field.value}
-                          onChange={field.onChange}
-                          disabled={loadingProducts || !!productError}
-                        />
-                        {fetchingProduct && (
-                          <p className="mt-1 text-sm text-blue-600">Fetching product details...</p>
-                        )}
-                        {productError && (
-                          <p className="mt-1 text-sm text-red-600">{productError}</p>
-                        )}
-                      </>
-                    )}
-                  />
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-700">
+                      Select Product
+                    </label>
+                    <p className="mb-3 text-xs text-gray-500">
+                      When you select a product, the category and gender will be automatically filled from the product details.
+                    </p>
+                    <Controller
+                      name="selectedProduct"
+                      control={control}
+                      render={({ field }) => (
+                        <>
+                          <Select
+                            label=""
+                            items={products}
+                            placeholder={loadingProducts ? "Loading..." : "Choose product"}
+                            value={field.value}
+                            onChange={field.onChange}
+                          />
+                          {fetchingProduct && (
+                            <p className="mt-1 text-sm text-blue-600">Fetching product details...</p>
+                          )}
+                          {productError && (
+                            <p className="mt-1 text-sm text-red-600">{productError}</p>
+                          )}
+                        </>
+                      )}
+                    />
+                  </div>
                   {errors.selectedProduct && (
                     <p className="mt-1 text-sm text-red-600">
                       {errors.selectedProduct.message}
@@ -359,18 +350,26 @@ const CreatePromotionForm: React.FC = () => {
                     </p>
                   )}
 
-                  {/* Product Categories */}
+                  {/* Product Categories - Auto-filled from selected product */}
                   <Controller
                     name="productCategory"
                     control={control}
                     render={({ field }) => (
-                      <Select
-                        label="Product Category"
-                        items={categories}
-                        placeholder="Choose category"
-                        value={field.value}
-                        onChange={field.onChange}
-                      />
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-700">
+                          Product Category
+                        </label>
+                        <input
+                          type="text"
+                          value={field.value || ""}
+                          readOnly
+                          className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-gray-500"
+                          placeholder="Will be auto-filled when you select a product"
+                        />
+                        {fetchingProduct && (
+                          <p className="mt-1 text-sm text-blue-600">Loading category...</p>
+                        )}
+                      </div>
                     )}
                   />
                   {errors.productCategory && (
@@ -379,18 +378,26 @@ const CreatePromotionForm: React.FC = () => {
                     </p>
                   )}
 
-                  {/* Product Sub-categories */}
+                  {/* Product Gender - Auto-filled from selected product */}
                   <Controller
                     name="productSubCategory"
                     control={control}
                     render={({ field }) => (
-                      <Select
-                        label="Product Sub-category"
-                        items={subCategories}
-                        placeholder="Choose sub-category"
-                        value={field.value}
-                        onChange={field.onChange}
-                      />
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-700">
+                          Product Gender
+                        </label>
+                        <input
+                          type="text"
+                          value={field.value || ""}
+                          readOnly
+                          className="w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 text-gray-500"
+                          placeholder="Will be auto-filled when you select a product"
+                        />
+                        {fetchingProduct && (
+                          <p className="mt-1 text-sm text-blue-600">Loading gender...</p>
+                        )}
+                      </div>
                     )}
                   />
                   {errors.productSubCategory && (
