@@ -69,6 +69,20 @@ const promotionSchema = z
       message: "End date must be after start date",
       path: ["endDate"],
     },
+  )
+  .refine(
+    (data) => {
+      const timeDiff = data.endDate.getTime() - data.startDate.getTime();
+      const daysDiff = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+      if (daysDiff > 7) {
+        return false;
+      }
+      return true;
+    },
+    {
+      message: "Duration cannot exceed 7 days",
+      path: ["endDate"],
+    },
   );
 
 type PromotionFormData = z.infer<typeof promotionSchema>;
@@ -287,7 +301,7 @@ const CreatePromotionForm: React.FC = () => {
 
                   {/* Duration */}
                   <label className="mb-2 block text-sm font-medium">
-                    Duration
+                    Duration (Maximum 7 days)
                   </label>
                   <div className="grid grid-cols-2 gap-4">
                     <Controller
@@ -299,22 +313,38 @@ const CreatePromotionForm: React.FC = () => {
                           onChange={field.onChange}
                           placeholderText="Start Date"
                           className="w-full rounded-lg border px-3 py-2.5"
+                          minDate={new Date()}
+                          dateFormat="dd/MM/yyyy"
                         />
                       )}
                     />
                     <Controller
                       name="endDate"
                       control={control}
-                      render={({ field }) => (
-                        <DatePicker
-                          selected={field.value}
-                          onChange={field.onChange}
-                          placeholderText="End Date"
-                          className="w-full rounded-lg border px-3 py-2.5"
-                        />
-                      )}
+                      render={({ field }) => {
+                        const startDate = watch("startDate");
+                        const maxEndDate = startDate ? new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000) : undefined;
+                        
+                        return (
+                          <DatePicker
+                            selected={field.value}
+                            onChange={field.onChange}
+                            placeholderText="End Date"
+                            className="w-full rounded-lg border px-3 py-2.5"
+                            minDate={startDate ? new Date(startDate.getTime() + 24 * 60 * 60 * 1000) : new Date()}
+                            maxDate={maxEndDate}
+                            dateFormat="dd/MM/yyyy"
+                            disabled={!startDate}
+                          />
+                        );
+                      }}
                     />
                   </div>
+                  {watch("startDate") && watch("endDate") && (
+                    <p className="mt-2 text-sm text-gray-600">
+                      Duration: {Math.ceil((watch("endDate").getTime() - watch("startDate").getTime()) / (1000 * 60 * 60 * 24))} days
+                    </p>
+                  )}
 
                   {/* Targeting Area */}
                   <InputGroup
