@@ -2,7 +2,7 @@
 
 import { createClient } from "@/auth/server";
 
-import { handleError } from "@/lib/utils";
+import { handleError } from "../lib/utils";
 
 export const loginAction = async (
   email: string,

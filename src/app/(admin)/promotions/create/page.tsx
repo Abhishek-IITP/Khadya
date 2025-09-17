@@ -113,9 +113,16 @@ const CreatePromotionForm: React.FC = () => {
     reset,
   } = useForm<PromotionFormData>({
     resolver: zodResolver(promotionSchema),
+    mode: "onSubmit", // Validate only on submit to avoid showing errors immediately
     defaultValues: {
       discountedPrice: false,
       discountType: "flat",
+      promotionName: "",
+      shortDescription: "",
+      selectedProduct: "",
+      productCategory: "",
+      productSubCategory: "",
+      targetingArea: "",
     },
   });
 
@@ -180,13 +187,38 @@ const CreatePromotionForm: React.FC = () => {
 
   const onSubmit = async (data: PromotionFormData) => {
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      console.log("Promotion created:", data);
+      // Prepare data for API call
+      const promotionData = {
+        name: data.promotionName,
+        description: data.shortDescription,
+        product_id: data.selectedProduct,
+        start_date: data.startDate.toISOString(),
+        end_date: data.endDate.toISOString(),
+      };
+
+      console.log("Submitting promotion data:", promotionData);
+
+      // Call the API to save promotion
+      const response = await fetch("/api/promotions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(promotionData),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to create promotion");
+      }
+
+      console.log("Promotion created successfully:", result);
       alert("Promotion created successfully!");
       reset();
     } catch (error) {
       console.error("Error creating promotion:", error);
-      alert("Error creating promotion. Please try again.");
+      alert(`Error creating promotion: ${error instanceof Error ? error.message : "Please try again."}`);
     }
   };
 
@@ -200,11 +232,19 @@ const CreatePromotionForm: React.FC = () => {
                 {/* Left Column */}
                 <div className="space-y-6">
                   {/* Promotion Name */}
-                  <InputGroup
-                    {...register("promotionName")}
-                    type="text"
-                    label="Promotion Name"
-                    placeholder="Enter Promotion Name"
+                  <Controller
+                    name="promotionName"
+                    control={control}
+                    render={({ field }) => (
+                      <InputGroup
+                        type="text"
+                        label="Promotion Name"
+                        placeholder="Enter Promotion Name"
+                        value={field.value || ""}
+                        handleChange={field.onChange}
+                        name={field.name}
+                      />
+                    )}
                   />
                   {errors.promotionName && (
                     <p className="mt-1 text-sm text-red-600">
@@ -347,11 +387,19 @@ const CreatePromotionForm: React.FC = () => {
                   )}
 
                   {/* Targeting Area */}
-                  <InputGroup
-                    {...register("targetingArea")}
-                    type="text"
-                    label="Targeting Area"
-                    placeholder="Enter targeting area"
+                  <Controller
+                    name="targetingArea"
+                    control={control}
+                    render={({ field }) => (
+                      <InputGroup
+                        type="text"
+                        label="Targeting Area"
+                        placeholder="Enter targeting area"
+                        value={field.value || ""}
+                        handleChange={field.onChange}
+                        name={field.name}
+                      />
+                    )}
                   />
                   {errors.targetingArea && (
                     <p className="mt-1 text-sm text-red-600">
@@ -370,7 +418,8 @@ const CreatePromotionForm: React.FC = () => {
                       <TextAreaGroup
                         label="Short Description"
                         placeholder="Write a short description"
-                        defaultValue={field.value}
+                        value={field.value || ""}
+                        onChange={field.onChange}
                       />
                     )}
                   />
