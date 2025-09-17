@@ -10,6 +10,7 @@ const promotionSchema = z.object({
   product_id: z.string().min(1, "Product ID is required"),
   start_date: z.string().min(1, "Start date is required"),
   end_date: z.string().min(1, "End date is required"),
+  status: z.string().optional().default("pending"),
 });
 
 // POST /api/promotions - Create a new promotion
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
           user_id: user.id,
           start_date: validatedData.start_date,
           end_date: validatedData.end_date,
-          status: "pending",
+          status: validatedData.status,
         },
       ])
       .select()

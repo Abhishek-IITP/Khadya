@@ -131,9 +131,43 @@ const CreatePromotionForm: React.FC = () => {
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [productError, setProductError] = useState<string | null>(null);
   const [fetchingProduct, setFetchingProduct] = useState(false);
+  const [checkingPromotions, setCheckingPromotions] = useState(false);
 
   const watchDiscountedPrice = watch("discountedPrice");
   const watchDiscountType = watch("discountType");
+
+  // Restore form data from localStorage when component mounts
+  useEffect(() => {
+    const savedFormData = localStorage.getItem('promotionFormData');
+    if (savedFormData) {
+      try {
+        const parsedData = JSON.parse(savedFormData);
+        console.log("Restoring form data from localStorage:", parsedData);
+        
+        // Restore form values
+        setValue("promotionName", parsedData.promotionName || "");
+        setValue("shortDescription", parsedData.shortDescription || "");
+        setValue("selectedProduct", parsedData.selectedProduct || "");
+        setValue("productCategory", parsedData.productCategory || "");
+        setValue("productSubCategory", parsedData.productSubCategory || "");
+        setValue("targetingArea", parsedData.targetingArea || "");
+        setValue("discountedPrice", parsedData.discountedPrice || false);
+        setValue("discountType", parsedData.discountType || "flat");
+        setValue("flatDiscount", parsedData.flatDiscount || undefined);
+        setValue("percentageDiscount", parsedData.percentageDiscount || undefined);
+        
+        // Restore dates
+        if (parsedData.startDate) {
+          setValue("startDate", new Date(parsedData.startDate));
+        }
+        if (parsedData.endDate) {
+          setValue("endDate", new Date(parsedData.endDate));
+        }
+      } catch (error) {
+        console.error("Error parsing saved form data:", error);
+      }
+    }
+  }, [setValue]);
 
   // Fetch all products for dropdown on mount
   useEffect(() => {
@@ -187,38 +221,81 @@ const CreatePromotionForm: React.FC = () => {
 
   const onSubmit = async (data: PromotionFormData) => {
     try {
-      // Prepare data for API call
-      const promotionData = {
-        name: data.promotionName,
-        description: data.shortDescription,
+      // First, check for existing active promotions for this product
+      console.log("Checking for existing promotions...");
+      setCheckingPromotions(true);
+      
+      const checkData = {
         product_id: data.selectedProduct,
         start_date: data.startDate.toISOString(),
         end_date: data.endDate.toISOString(),
       };
 
-      console.log("Submitting promotion data:", promotionData);
-
-      // Call the API to save promotion
-      const response = await fetch("/api/promotions", {
+      const checkResponse = await fetch("/api/promotions/check", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(promotionData),
+        body: JSON.stringify(checkData),
       });
 
-      const result = await response.json();
+      const checkResult = await checkResponse.json();
 
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to create promotion");
+      if (!checkResponse.ok) {
+        throw new Error(checkResult.error || "Failed to check existing promotions");
       }
 
-      console.log("Promotion created successfully:", result);
-      alert("Promotion created successfully!");
-      reset();
+      // If there's a conflict, show error and stop
+      if (checkResult.hasConflict) {
+        alert(checkResult.message);
+        setCheckingPromotions(false);
+        return;
+      }
+
+      console.log("No conflicts found, proceeding to payment...");
+      setCheckingPromotions(false);
+
+      // Save form data to localStorage before redirecting
+      const formDataToSave = {
+        ...data,
+        startDate: data.startDate.toISOString(),
+        endDate: data.endDate.toISOString(),
+      };
+      localStorage.setItem('promotionFormData', JSON.stringify(formDataToSave));
+      console.log("Form data saved to localStorage:", formDataToSave);
+
+      // Get the selected product name for display
+      const selectedProduct = products.find(p => p.value === data.selectedProduct);
+      const productName = selectedProduct?.label || "Selected Product";
+
+      // Prepare data for payment gateway
+      const paymentData = {
+        name: data.promotionName,
+        description: data.shortDescription,
+        productName: productName,
+        startDate: data.startDate.toISOString(),
+        endDate: data.endDate.toISOString(),
+      };
+
+      console.log("Redirecting to payment gateway with data:", paymentData);
+
+      // Create URL parameters for payment gateway
+      const params = new URLSearchParams({
+        name: paymentData.name,
+        description: paymentData.description,
+        productName: paymentData.productName,
+        productCategory: data.productCategory, // Pass the product category for display
+        productId: data.selectedProduct, // Pass the product ID for database saving
+        startDate: paymentData.startDate,
+        endDate: paymentData.endDate,
+      });
+
+      // Redirect to payment gateway
+      window.location.href = `/promotions/promotion-payment?${params.toString()}`;
     } catch (error) {
-      console.error("Error creating promotion:", error);
-      alert(`Error creating promotion: ${error instanceof Error ? error.message : "Please try again."}`);
+      console.error("Error preparing payment:", error);
+      alert(`Error preparing payment: ${error instanceof Error ? error.message : "Please try again."}`);
+      setCheckingPromotions(false);
     }
   };
 
@@ -236,10 +313,10 @@ const CreatePromotionForm: React.FC = () => {
                     name="promotionName"
                     control={control}
                     render={({ field }) => (
-                      <InputGroup
-                        type="text"
-                        label="Promotion Name"
-                        placeholder="Enter Promotion Name"
+                  <InputGroup
+                    type="text"
+                    label="Promotion Name"
+                    placeholder="Enter Promotion Name"
                         value={field.value || ""}
                         handleChange={field.onChange}
                         name={field.name}
@@ -260,27 +337,27 @@ const CreatePromotionForm: React.FC = () => {
                     <p className="mb-3 text-xs text-gray-500">
                       When you select a product, the category and gender will be automatically filled from the product details.
                     </p>
-                    <Controller
-                      name="selectedProduct"
-                      control={control}
-                      render={({ field }) => (
-                        <>
-                          <Select
+                  <Controller
+                    name="selectedProduct"
+                    control={control}
+                    render={({ field }) => (
+                      <>
+                        <Select
                             label=""
-                            items={products}
-                            placeholder={loadingProducts ? "Loading..." : "Choose product"}
-                            value={field.value}
-                            onChange={field.onChange}
-                          />
-                          {fetchingProduct && (
-                            <p className="mt-1 text-sm text-blue-600">Fetching product details...</p>
-                          )}
-                          {productError && (
-                            <p className="mt-1 text-sm text-red-600">{productError}</p>
-                          )}
-                        </>
-                      )}
-                    />
+                          items={products}
+                          placeholder={loadingProducts ? "Loading..." : "Choose product"}
+                          value={field.value}
+                          onChange={field.onChange}
+                        />
+                        {fetchingProduct && (
+                          <p className="mt-1 text-sm text-blue-600">Fetching product details...</p>
+                        )}
+                        {productError && (
+                          <p className="mt-1 text-sm text-red-600">{productError}</p>
+                        )}
+                      </>
+                    )}
+                  />
                   </div>
                   {errors.selectedProduct && (
                     <p className="mt-1 text-sm text-red-600">
@@ -366,16 +443,16 @@ const CreatePromotionForm: React.FC = () => {
                         const maxEndDate = startDate ? new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000) : undefined;
                         
                         return (
-                          <DatePicker
-                            selected={field.value}
-                            onChange={field.onChange}
-                            placeholderText="End Date"
-                            className="w-full rounded-lg border px-3 py-2.5"
+                        <DatePicker
+                          selected={field.value}
+                          onChange={field.onChange}
+                          placeholderText="End Date"
+                          className="w-full rounded-lg border px-3 py-2.5"
                             minDate={startDate ? new Date(startDate.getTime() + 24 * 60 * 60 * 1000) : new Date()}
                             maxDate={maxEndDate}
                             dateFormat="dd/MM/yyyy"
                             disabled={!startDate}
-                          />
+                        />
                         );
                       }}
                     />
@@ -391,10 +468,10 @@ const CreatePromotionForm: React.FC = () => {
                     name="targetingArea"
                     control={control}
                     render={({ field }) => (
-                      <InputGroup
-                        type="text"
-                        label="Targeting Area"
-                        placeholder="Enter targeting area"
+                  <InputGroup
+                    type="text"
+                    label="Targeting Area"
+                    placeholder="Enter targeting area"
                         value={field.value || ""}
                         handleChange={field.onChange}
                         name={field.name}
@@ -492,10 +569,15 @@ const CreatePromotionForm: React.FC = () => {
                 <div className="flex justify-end">
                   <button
                     type="submit"
-                    disabled={isSubmitting}
-                    className="rounded-lg bg-blue-600 px-8 py-3 text-white"
+                    disabled={isSubmitting || checkingPromotions}
+                    className="rounded-lg bg-blue-600 px-8 py-3 text-white disabled:bg-gray-400"
                   >
-                    {isSubmitting ? "Creating..." : "Create Promotion"}
+                    {checkingPromotions 
+                      ? "Checking for existing promotions..." 
+                      : isSubmitting 
+                        ? "Processing..." 
+                        : "Proceed to Payment"
+                    }
                   </button>
                 </div>
               </div>
