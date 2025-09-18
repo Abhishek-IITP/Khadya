@@ -34,15 +34,21 @@ export function Notification() {
 
   // Fetch notifications from API
   const fetchNotifications = useCallback(async () => {
+    console.log("Fetching notifications...");
     setIsLoading(true);
     try {
       const response = await fetch("/api/notifications/expired-promotions");
       const data = await response.json();
       
+      console.log("Notification API response:", data);
+      
       if (data.success) {
         setNotifications(data.notifications || []);
         setNotificationCount(data.count || 0);
         setLastFetchTime(new Date());
+        console.log(`Found ${data.count || 0} expired promotion notifications`);
+      } else {
+        console.error("Notification API error:", data.error);
       }
     } catch (error) {
       console.error("Error fetching notifications:", error);
@@ -94,17 +100,15 @@ export function Notification() {
     // Schedule 2 more notifications at 30 and 60 minutes
     intervals.push(
       setTimeout(() => {
-        if (notificationCount > 0) {
-          fetchNotifications();
-        }
+        console.log("30-minute notification reminder triggered");
+        fetchNotifications();
       }, 30 * 60 * 1000) // 30 minutes
     );
     
     intervals.push(
       setTimeout(() => {
-        if (notificationCount > 0) {
-          fetchNotifications();
-        }
+        console.log("60-minute notification reminder triggered");
+        fetchNotifications();
       }, 60 * 60 * 1000) // 60 minutes
     );
 

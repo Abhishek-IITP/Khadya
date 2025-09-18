@@ -20,6 +20,24 @@ export async function GET() {
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayISO = yesterday.toISOString();
 
+    // First, let's update any expired promotions that haven't been updated yet
+    const { data: updatedPromotions, error: updateError } = await supabase
+      .from("Promotions")
+      .update({ status: "unpromoted" })
+      .eq("user_id", user.id)
+      .eq("status", "promoted")
+      .lt("end_date", currentDate)
+      .select("id, name, end_date");
+
+    if (updateError) {
+      console.error("Error updating expired promotions:", updateError);
+    } else if (updatedPromotions && updatedPromotions.length > 0) {
+      console.log(`Updated ${updatedPromotions.length} expired promotions to unpromoted status`);
+      updatedPromotions.forEach(promo => {
+        console.log(`Notification: Promotion "${promo.name}" expired on ${promo.end_date}`);
+      });
+    }
+
     // Get expired promotions with product details
     const { data: expiredPromotions, error } = await supabase
       .from("Promotions")
@@ -29,11 +47,7 @@ export async function GET() {
         description,
         end_date,
         status,
-        products!inner(
-          id,
-          title,
-          category
-        )
+        product_id
       `)
       .eq("user_id", user.id)
       .eq("status", "unpromoted")
@@ -51,9 +65,9 @@ export async function GET() {
       id: promotion.id,
       type: "expired_promotion",
       title: "Promotion Expired",
-      message: `Your promotion "${promotion.name}" for ${promotion.products.title} has expired.`,
-      productName: promotion.products.title,
-      productCategory: promotion.products.category,
+      message: `Your promotion "${promotion.name}" has expired.`,
+      productName: "Product ID: " + promotion.product_id,
+      productCategory: "Unknown Category",
       promotionName: promotion.name,
       endDate: promotion.end_date,
       timestamp: new Date().toISOString(),
